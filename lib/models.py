@@ -1,41 +1,108 @@
-from sqlalchemy import create_engine, func
-from sqlalchemy import ForeignKey, Table, Column, Integer, String, DateTime, MetaData
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Table
+from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-convention = {
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-}
-metadata = MetaData(naming_convention=convention)
+Base = declarative_base()
 
-Base = declarative_base(metadata=metadata)
+# Define one-to-one relationship
+class UserProfile(Base):
+    __tablename__ = 'user_profiles'
+    id = Column(Integer, primary_key=True)
+    bio = Column(String)
 
-class Game(Base):
-    __tablename__ = 'games'
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True)
+    username = Column(String)
+    profile_id = Column(Integer, ForeignKey('user_profiles.id'))
+    profile = relationship("UserProfile", backref="user", uselist=False)
 
-    id = Column(Integer(), primary_key=True)
-    title = Column(String())
-    genre = Column(String())
-    platform = Column(String())
-    price = Column(Integer())
+# Define one-to-many relationship
+class Author(Base):
+    __tablename__ = 'authors'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    books = relationship("Book", back_populates="author")
 
-    reviews = relationship('Review', backref=backref('game'))
+class Book(Base):
+    __tablename__ = 'books'
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    author_id = Column(Integer, ForeignKey('authors.id'))
+    author = relationship("Author", back_populates="books")
 
-    def __repr__(self):
-        return f'Game(id={self.id}, ' + \
-            f'title={self.title}, ' + \
-            f'platform={self.platform})'
+# Define many-to-many relationship
+book_genre = Table('book_genre', Base.metadata,
+    Column('book_id', Integer, ForeignKey('books.id')),
+    Column('genre_id', Integer, ForeignKey('genres.id'))
+)
 
-class Review(Base):
-    __tablename__ = 'reviews'
+class Genre(Base):
+    __tablename__ = 'genres'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    books = relationship("Book", secondary=book_genre, back_populates="genres")
 
-    id = Column(Integer(), primary_key=True)
-    score = Column(Integer())
-    comment = Column(String())
-    
-    game_id = Column(Integer(), ForeignKey('games.id'))
+# Create the database and tables
+engine = create_engine('sqlite:///mydatabase.db')
+Base.metadata.create_all(engine)
 
-    def __repr__(self):
-        return f'Review(id={self.id}, ' + \
-            f'score={self.score}, ' + \
-            f'game_id={self.game_id})'
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Seed data for one-to-one relationship
+user_profile1 = UserProfile(bio="A bio for the user 1")
+user1 = User(username="Stephan_Maina", profile=user_profile1)
+
+user_profile2 = UserProfile(bio="A bio for the user 2")
+user2 = User(username="Lucy_Wanjiru", profile=user_profile2)
+
+session.add_all([user1, user2, user_profile1, user_profile2])
+session.commit()
+
+# Seed data for one-to-many relationship
+author1 = Author(name="J.K. Rowling")
+author2 = Author(name="George R.R. Martin")
+
+book1 = Book(title="Harry Potter and the Sorcerer's Stone", author=author1)
+book2 = Book(title="Harry Potter and the Chamber of Secrets", author=author1)
+book3 = Book(title="A Game of Thrones", author=author2)
+book4 = Book(title="A Clash of Kings", author=author2)
+
+session.add_all([author1, author2, book1, book2, book3, book4])
+session.commit()
+
+# Seed data for many-to-many relationship
+fantasy_genre = Genre(name="Fantasy")
+mystery_genre = Genre(name="Mystery")
+sci_fi_genre = Genre(name="Science Fiction")
+
+book1.genres.extend([fantasy_genre, mystery_genre])
+book2.genres.extend([fantasy_genre, mystery_genre])
+book3.genres.append(fantasy_genre)
+book4.genres.append(sci_fi_genre)
+
+session.add_all([fantasy_genre, mystery_genre, sci_fi_genre])
+session.commit()
+
+# Query data
+# Query and print all users with their profiles
+users_with_profiles = session.query(User).all()
+for user in users_with_profiles:
+    print(f'User: {user.username}, Bio: {user.profile.bio}')
+
+# Query and print all authors with their books
+authors_with_books = session.query(Author).all()
+for author in authors_with_books:
+    print(f'Author: {author.name}')
+    for book in author.books:
+        print(f'Book Title: {book.title}')
+
+# Query and print all books with their genres
+books_with_genres = session.query(Book).all()
+for book in books_with_genres:
+    print(f'Book Title: {book.title}')
+    for genre in book.genres:
+        print(f'Genre: {genre.name}')
+
+session.close()
