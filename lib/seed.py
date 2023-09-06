@@ -1,56 +1,37 @@
 #!/usr/bin/env python3
 
-from faker import Faker
-import random
-
-from sqlalchemy import create_engine
+from models import Base, User, UserProfile, Author, Book, Genre, engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Game, Review
+Base.metadata.create_all(engine)
 
-if __name__ == '__main__':
-    engine = create_engine('sqlite:///many_to_many.db')
-    Session = sessionmaker(bind=engine)
-    session = Session()
+Session = sessionmaker(bind=engine)
+session = Session()
 
-    session.query(Game).delete()
-    session.query(Review).delete()
+# Seed data for one-to-one relationship
+user_profile = UserProfile(bio="A bio for the user")
+user = User(username="Stephan_Maina", profile=user_profile)
+session.add(user)
+session.add(user_profile)  # You need to add user_profile as well
+session.commit()
 
-    fake = Faker()
+# Seed data for one-to-many relationship
+author = Author(name="J.K. Rowling")
+book1 = Book(title="Harry Potter and the Sorcerer's Stone", author=author)
+book2 = Book(title="Harry Potter and the Chamber of Secrets", author=author)
+session.add(author)
+session.add(book1)  # Add book1 to the session
+session.add(book2)  # Add book2 to the session
+session.commit()
 
-    genres = ['action', 'adventure', 'strategy',
-        'puzzle', 'first-person shooter', 'racing']
-    platforms = ['nintendo 64', 'gamecube', 'wii', 'wii u', 'switch',
-        'playstation', 'playstation 2', 'playstation 3', 'playstation 4',
-        'playstation 5', 'xbox', 'xbox 360', 'xbox one', 'pc']
+# Seed data for many-to-many relationship
+fantasy_genre = Genre(name="Fantasy")
+mystery_genre = Genre(name="Mystery")
+book1.genres.extend([fantasy_genre, mystery_genre])
+book2.genres.append(fantasy_genre)
+session.add(fantasy_genre)  # Add genres to the session
+session.add(mystery_genre)  # Add genres to the session
+session.commit()
 
-    games = []
-    for i in range(50):
-        game = Game(
-            title=fake.unique.name(),
-            genre=random.choice(genres),
-            platform=random.choice(platforms),
-            price=random.randint(5, 60)
-        )
+session.close()
 
-        # add and commit individually to get IDs back
-        session.add(game)
-        session.commit()
-
-        games.append(game)
-
-    reviews = []
-    for game in games:
-        for i in range(random.randint(1,5)):
-            
-            review = Review(
-                score=random.randint(0, 10),
-                comment=fake.sentence(),
-                game_id=game.id,
-            )
-
-            reviews.append(review)
-
-    session.bulk_save_objects(reviews)
-    session.commit()
-    session.close()
